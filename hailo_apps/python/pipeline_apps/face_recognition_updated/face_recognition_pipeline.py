@@ -116,7 +116,7 @@ class GStreamerFaceRecognitionApp(GStreamerApp):
         # get_source_pipeline() falls back to a filesrc pointed at the literal string
         # "usb" (that's the "No such file 'usb'" error). Use 'rpi' instead of 'usb' if
         # you're on the Raspberry Pi CSI camera rather than a USB webcam.
-        self.video_source = 'usb'
+        self.video_source = '/dev/video0'
         self.source_type = 'usb'
 
         # Runtime mode - distinct from self.options_menu.mode (the CLI default). The app
