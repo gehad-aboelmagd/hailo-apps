@@ -40,17 +40,21 @@ from hailo_apps.python.core.common.defines import (
     FACE_RECOGNITION_POSTPROCESS_SO_FILENAME, 
     FACE_ALIGN_POSTPROCESS_SO_FILENAME, 
     FACE_CROP_POSTPROCESS_SO_FILENAME,
+    RESOURCES_VIDEOS_DIR_NAME,
+    FACE_RECOGNITION_VIDEO_NAME,
     FACE_RECON_TRAIN_DIR_NAME,
     FACE_RECON_SAMPLES_DIR_NAME,
     RESOURCES_JSON_DIR_NAME,
     FACE_DETECTION_JSON_NAME,
+    DEFAULT_LOCAL_RESOURCES_PATH,
     FACE_RECON_DATABASE_DIR_NAME,
+    FACE_RECON_LOCAL_SAMPLES_DIR_NAME,
+    BASIC_PIPELINES_VIDEO_EXAMPLE_NAME,
     SCRFD_10G_POSTPROCESS_FUNCTION,
     SCRFD_2_5G_POSTPROCESS_FUNCTION,
     HAILO8_ARCH,
     HAILO10H_ARCH,
-    HAILO8L_ARCH,
-    USB_CAMERA,
+    HAILO8L_ARCH
 )
 from hailo_apps.python.core.gstreamer.gstreamer_helper_pipelines import QUEUE, INFERENCE_PIPELINE, INFERENCE_PIPELINE_WRAPPER, TRACKER_PIPELINE, USER_CALLBACK_PIPELINE, DISPLAY_PIPELINE, CROPPER_PIPELINE
 from hailo_apps.python.core.common.hailo_logger import get_logger
@@ -105,10 +109,15 @@ class GStreamerFaceRecognitionApp(GStreamerApp):
         
         # The app always operates on a LIVE camera feed - in both run (recognition) and
         # train (enrollment) modes. Any pre-recorded/bundled example video source is ignored.
-        # NOTE: adjust the token below ('usb') if your GStreamerApp.get_source_pipeline()
-        # implementation expects a different value for a live camera (e.g. 'rpi' for a CSI
-        # camera, or an explicit device path such as '/dev/video0').
-        self.video_source = USB_CAMERA
+        # NOTE: 'usb' matches CAMERA_KEYWORDS in hailo_apps.python.core.common.defines.
+        # Both video_source AND source_type must be set here: super().__init__() (called
+        # above) already resolved self.source_type from --input *before* this line runs,
+        # so overriding video_source alone leaves source_type as "file" and
+        # get_source_pipeline() falls back to a filesrc pointed at the literal string
+        # "usb" (that's the "No such file 'usb'" error). Use 'rpi' instead of 'usb' if
+        # you're on the Raspberry Pi CSI camera rather than a USB webcam.
+        self.video_source = 'usb'
+        self.source_type = 'usb'
 
         # Runtime mode - distinct from self.options_menu.mode (the CLI default). The app
         # always STARTS in 'run' mode; it is switched to 'train' automatically at runtime
@@ -206,7 +215,7 @@ class GStreamerFaceRecognitionApp(GStreamerApp):
         detection_pipeline_wrapper = INFERENCE_PIPELINE_WRAPPER(detection_pipeline)
         tracker_pipeline = TRACKER_PIPELINE(class_id=-1, kalman_dist_thr=0.7, iou_thr=0.8, init_iou_thr=0.9, keep_new_frames=2, keep_tracked_frames=6, keep_lost_frames=8, keep_past_metadata=True, name='hailo_face_tracker')
         mobile_facenet_pipeline = INFERENCE_PIPELINE(hef_path=self.hef_path_recognition, post_process_so=self.post_process_so_face_recognition, post_function_name=self.recognition_func, batch_size=self.batch_size, config_json=None, name='face_recognition_inference')
-        cropper_pipeline = CROPPER_PIPELINE(inner_pipeline=(f'hailofilter so-path={self.post_process_so_face_aligntr} '
+        cropper_pipeline = CROPPER_PIPELINE(inner_pipeline=(f'hailofilter so-path={self.post_process_so_face_align} '
                                                             f'name=face_align_hailofilter use-gst-buffer=true qos=false ! '
                                                             f'{QUEUE(name="detector_pos_face_align_q")} ! '
                                                             f'{mobile_facenet_pipeline}'),
@@ -442,6 +451,8 @@ class GStreamerFaceRecognitionApp(GStreamerApp):
             
             # anyway re-process for "double-check" after self.skip_frames X 3
             self.track_id_frame_count[track_id] = -3 * self.skip_frames  
+            if self.user_data.telegram_enabled:  # adding task to the worker queue
+                self.add_task('send_notification', name=person['label'], global_id=track_id, confidence=new_confidence, frame=frame)
 
         return Gst.PadProbeReturn.OK
     
