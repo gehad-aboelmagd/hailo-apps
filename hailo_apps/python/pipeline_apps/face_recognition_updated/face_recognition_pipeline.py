@@ -281,6 +281,7 @@ class GStreamerFaceRecognitionApp(GStreamerApp):
         self.user_data.unknown_face_detected = False
         self.create_pipeline()
         self.connect_vector_db_callback()
+        self._connect_callback()  # wires app_callback (business logic) to the "identity_callback" element - without this, app_callback never fires and unknown_face_detected never gets set
         bus = self.pipeline.get_bus()
         self.pipeline.set_state(Gst.State.PLAYING)
         print("Running in RECOGNITION mode (live camera). Waiting for faces...")
@@ -451,6 +452,8 @@ class GStreamerFaceRecognitionApp(GStreamerApp):
             
             # anyway re-process for "double-check" after self.skip_frames X 3
             self.track_id_frame_count[track_id] = -3 * self.skip_frames  
+            if self.user_data.telegram_enabled:  # adding task to the worker queue
+                self.add_task('send_notification', name=person['label'], global_id=track_id, confidence=new_confidence, frame=frame)
 
         return Gst.PadProbeReturn.OK
     
