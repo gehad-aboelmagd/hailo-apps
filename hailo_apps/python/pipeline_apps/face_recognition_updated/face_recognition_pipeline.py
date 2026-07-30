@@ -452,8 +452,6 @@ class GStreamerFaceRecognitionApp(GStreamerApp):
             
             # anyway re-process for "double-check" after self.skip_frames X 3
             self.track_id_frame_count[track_id] = -3 * self.skip_frames  
-            if self.user_data.telegram_enabled:  # adding task to the worker queue
-                self.add_task('send_notification', name=person['label'], global_id=track_id, confidence=new_confidence, frame=frame)
 
         return Gst.PadProbeReturn.OK
     
